@@ -1,5 +1,6 @@
 import torch
 import pytest
+from parameterized import parameterized
 
 
 def test_nll():
@@ -137,3 +138,43 @@ def test_transducer_loss():
     )
     out_cost.backward()
     assert out_cost.item() == 2.247833251953125
+
+@parameterized.expand([("cpu"), ("cuda")])
+def test_pytorch_transducer_loss(device):
+    if device == "cuda" and torch.cuda.device_count() == 0:
+        pytest.skip("This test can only be run if a GPU is available")
+
+    from torchaudio.prototype.rnnt_loss import rnnt_loss
+
+    device = torch.device(device)
+    log_probs = (
+        torch.Tensor(
+            [
+                [
+                    [
+                        [0.1, 0.6, 0.1, 0.1, 0.1],
+                        [0.1, 0.1, 0.6, 0.1, 0.1],
+                        [0.1, 0.1, 0.2, 0.8, 0.1],
+                    ],
+                    [
+                        [0.1, 0.6, 0.1, 0.1, 0.1],
+                        [0.1, 0.1, 0.2, 0.1, 0.1],
+                        [0.7, 0.1, 0.2, 0.1, 0.1],
+                    ],
+                ]
+            ]
+        )
+        .to(device)
+        .requires_grad_()
+    )
+    targets = torch.Tensor([[1, 2]]).to(device).int()
+    probs_length = torch.Tensor([2.0]).to(device).int()
+    target_length = torch.Tensor([2.0]).to(device).int()
+
+    out_cost = rnnt_loss(
+        log_probs, targets, probs_length, target_length, blank=0,
+        reuse_logits_for_grads=False
+    )
+    loss = out_cost.mean()
+    loss.backward()    
+    assert loss.item() == 2.247833251953125
